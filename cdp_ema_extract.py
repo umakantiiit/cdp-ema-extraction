@@ -420,21 +420,26 @@ output json format:
 # Function to clean JSON response
 def clean_json_response(response_text):
     """
-    Clean the response text by removing ```
+    Clean the response text by removing ```json markers and extracting pure JSON
     """
     cleaned = response_text.strip()
     
-    # Remove ```json at the beginning
-    if cleaned.startswith("```
-        cleaned = cleaned[7:]
-    elif cleaned.startswith("```"):
-        cleaned = cleaned[3:]
+    # Define markers as variables to avoid syntax issues
+    json_marker = "```
+    code_marker = "```"
     
     # Remove ```
-    if cleaned.endswith("```"):
-        cleaned = cleaned[:-3]
+    if cleaned.startswith(json_marker):
+        cleaned = cleaned[len(json_marker):]
+    elif cleaned.startswith(code_marker):
+        cleaned = cleaned[len(code_marker):]
+    
+    # Remove ``` at the end
+    if cleaned.endswith(code_marker):
+        cleaned = cleaned[:-len(code_marker)]
     
     return cleaned.strip()
+
 
 # Function to call Gemini API
 def call_gemini_api(text_data, prompt):

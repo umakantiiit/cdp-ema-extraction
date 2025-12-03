@@ -418,17 +418,18 @@ output json format:
 """
 
 # Function to clean JSON response
+# Function to clean JSON response
 def clean_json_response(response_text):
     """
-    Clean the response text by removing ```json markers and extracting pure JSON
+    Clean the response text by removing ```
     """
     cleaned = response_text.strip()
     
-    # Define markers as variables to avoid syntax issues
-    json_marker = "```
-    code_marker = "```"
+    # Define markers using string concatenation to avoid syntax issues
+    json_marker = "`" + "`" + "`" + "json"
+    code_marker = "`" + "`" + "`"
     
-    # Remove ```
+    # Remove ```json or ```
     if cleaned.startswith(json_marker):
         cleaned = cleaned[len(json_marker):]
     elif cleaned.startswith(code_marker):
@@ -439,6 +440,7 @@ def clean_json_response(response_text):
         cleaned = cleaned[:-len(code_marker)]
     
     return cleaned.strip()
+
 
 
 # Function to call Gemini API
@@ -506,7 +508,7 @@ if st.session_state.extracted_data is not None:
     st.subheader("📊 Extracted Information")
     
     # Display in multiple formats for better visualization
-    col1, col2 = st.columns()[1]
+    col1, col2 = st.columns([1, 1])
     
     with col1:
         st.markdown("#### 🗂️ Interactive JSON View")

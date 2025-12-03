@@ -503,35 +503,74 @@ if st.button("🔍 Extract Info", type="primary", use_container_width=True):
                 st.error(f"❌ Error during extraction: {str(e)}")
 
 # Display extracted data
+# Display extracted data
 if st.session_state.extracted_data is not None:
     st.divider()
     st.subheader("📊 Extracted Information")
     
-    # Display in multiple formats for better visualization
-    col1, col2 = st.columns([1, 1])
+    # Check if data is a list or dict and handle accordingly
+    extracted_data = st.session_state.extracted_data
     
-    with col1:
-        st.markdown("#### 🗂️ Interactive JSON View")
-        st.json(st.session_state.extracted_data, expanded=True)
-    
-    with col2:
-        st.markdown("#### 📋 Formatted Details")
+    # If it's a list (array of indications)
+    if isinstance(extracted_data, list):
+        col1, col2 = st.columns([1, 1])
         
-        # Display each key-value pair in a formatted way
-        for key, value in st.session_state.extracted_data.items():
-            with st.expander(f"**{key.replace('_', ' ').title()}**", expanded=True):
-                if isinstance(value, list):
-                    for item in value:
-                        if isinstance(item, dict):
-                            for k, v in item.items():
-                                st.markdown(f"- **{k}**: {v}")
-                        else:
-                            st.markdown(f"- {item}")
-                elif isinstance(value, dict):
-                    for k, v in value.items():
-                        st.markdown(f"- **{k}**: {v}")
+        with col1:
+            st.markdown("#### 🗂️ Interactive JSON View")
+            st.json(extracted_data, expanded=True)
+        
+        with col2:
+            st.markdown("#### 📋 Formatted Details")
+            
+            # Loop through each indication in the list
+            for idx, item in enumerate(extracted_data):
+                if isinstance(item, dict):
+                    # Create expander title from Primary Disease_category and Indication #
+                    disease_cat = item.get("Primary Disease_category", f"Item {idx + 1}")
+                    indication_num = item.get("Indication #", "")
+                    expander_title = f"{disease_cat} - Indication #{indication_num}" if indication_num else disease_cat
+                    
+                    with st.expander(f"**{expander_title}**", expanded=False):
+                        for key, value in item.items():
+                            if key not in ["Primary Disease_category", "Indication #"]:  # Already in title
+                                st.markdown(f"**{key.replace('_', ' ').title()}:**")
+                                if isinstance(value, list):
+                                    for v in value:
+                                        st.markdown(f"  - {v}")
+                                else:
+                                    st.write(value)
                 else:
-                    st.write(value)
+                    st.write(item)
+    
+    # If it's a dictionary (single object)
+    elif isinstance(extracted_data, dict):
+        col1, col2 = st.columns([1, 1])
+        
+        with col1:
+            st.markdown("#### 🗂️ Interactive JSON View")
+            st.json(extracted_data, expanded=True)
+        
+        with col2:
+            st.markdown("#### 📋 Formatted Details")
+            
+            for key, value in extracted_data.items():
+                with st.expander(f"**{key.replace('_', ' ').title()}**", expanded=True):
+                    if isinstance(value, list):
+                        for item in value:
+                            if isinstance(item, dict):
+                                for k, v in item.items():
+                                    st.markdown(f"- **{k}**: {v}")
+                            else:
+                                st.markdown(f"- {item}")
+                    elif isinstance(value, dict):
+                        for k, v in value.items():
+                            st.markdown(f"- **{k}**: {v}")
+                    else:
+                        st.write(value)
+    
+    # Fallback for other types
+    else:
+        st.json(extracted_data)
     
     # Download button for the extracted JSON
     st.divider()
@@ -542,6 +581,7 @@ if st.session_state.extracted_data is not None:
         mime="application/json",
         use_container_width=True
     )
+
 
 # Footer
 st.divider()

@@ -129,32 +129,78 @@ Your task is to analyze the provided EMA clinical text and convert it into a sin
 - **Constraint:** Stop extracting when the text moves to a new patient population or a different drug combination.
 
 ### **Treatment line**
-- **Source:** EXTRACT ONLY FROM "Indication_text".
-- **Logic:**
-  - If text says "first-line": value is "First line".
-  - If text says "after prior...", "after failure...", "progressing on...", "second-line": value is "Second line" (or "Third line" if specified).
-  - If text mentions "Adjuvant" or "Neoadjuvant" without specifying a line: value is "_".
-  - if the text mentioned like "after three or more lines" then use +1 logic and output fourth or fifth line.
-  - If no line is mentioned: value is "_".
+**Objective:** Determine the timing/sequence of this specific drug in the patient's treatment history.
+**Instructions:** Evaluate the `Indication_text` against the following rules in ORDER. Stop at the first match.
+1.  **Rule (First Line):**
+    - IF text contains: "first-line", "treatment naïve", "previously untreated", OR "no prior systemic therapy".
+    - OUTPUT: "First line"
 
+2.  **Rule (Calculated Line - The "+1" Logic):**
+    - IF text contains "after [Number] lines" or "after [Number] prior therapies":
+    - ACTION: Add 1 to the number found in text.
+    - EXAMPLE: "after 3 lines" -> Output: "Fourth line". "after 2 lines" -> Output: "Third line".
+
+3.  **Rule (Second Line / Relapsed / Refractory):**
+    - IF text contains: "second-line", "after prior chemotherapy", "after failure of", "progressing on", "relapsed", "refractory", OR "recurrence after".
+    - AND logic in Rule 2 (Calculated Line) did not apply.
+    - OUTPUT: "Second line"
+
+4.  **Rule (Adjuvant/Neoadjuvant Exception):**
+    - IF text is for "Adjuvant" or "Neoadjuvant" treatment AND no specific line (first/second) is mentioned.
+    - OUTPUT: "_"
+
+5.  **Rule (Default):**
+    - If none of the above match.
+    - OUTPUT: "_"
+
+    
 ### **Treatment modality**
 - **Source:** EXTRACT ONLY FROM "Indication_text".
-- **Logic:** Look for these keywords and combine them with commas if multiple exist:
-  - "Monotherapy" (or implied if used alone).
-  - "Combination" (if used with ipilimumab, chemotherapy, etc.).
-  - "Adjuvant".
-  - "Neoadjuvant".
-- **Example:** "Combination, Neoadjuvant"
+**Objective:** Identify the configuration of the drug administration.
+**Instructions:** Scan `Indication_text` for keywords. If multiple categories match, separate them with a comma (e.g., "Combination, Neoadjuvant").
+1.  **Category: Combination**
+    - LOOK FOR: "in combination with", "combined with", "plus", "with [Drug Name]", "in addition to other medicinal products".
+    - NOTE: Do NOT count "adjunct to diet/exercise" as a Combination. Only count combination with other *drugs*.
+    - OUTPUT: "Combination"
 
+2.  **Category: Monotherapy**
+    - LOOK FOR: "monotherapy", "single agent".
+    - INFERENCE RULE: If the text says "Indicated for the treatment of [Disease]" and does NOT mention any other drug or combination, assume "Monotherapy".
+    - OUTPUT: "Monotherapy"
+
+3.  **Category: Adjuvant**
+    - LOOK FOR: "adjuvant" (appearing before surgery or resection mentions), "post-operative".
+    - OUTPUT: "Adjuvant"
+
+4.  **Category: Neoadjuvant**
+    - LOOK FOR: "neoadjuvant", "pre-operative".
+    - OUTPUT: "Neoadjuvant"
+
+5.  **Rule (Null):**
+    - If the indication is purely for "Weight Management" as adjunct to diet (without other drugs).
+    - OUTPUT: "_"
+
+    
 ### **Population**
 - **Source:** EXTRACT ONLY FROM "Indication_text".
-- **Logic:** Identify the target demographic.
-  - "adults" -> "Adult"
-  -"10 years and above" -> "Adolescent"
-  - "adolescents" -> "Adolescent"
-  - "pediatric" / "children" -> "Pediatric"
-- **Format:** "Adult, Adolescent" (Comma separated if multiple).
-- TAKE SPECIAL CARE WHILE EXTRACTING THIS.DONOT USE PEDIATRIC IF NOT EXPLICITELY MENTIONED.
+**Objective:** Map target demographics to standard values.
+**Instructions:** Extract only explicitly stated groups. Do not hallucinate.
+1.  **Map to "Adult" if:**
+    - Text contains: "adults", "men", "women", "elderly".
+    - Text mentions age: "18 years" or older.
+
+2.  **Map to "Adolescent" if:**
+    - Text contains: "adolescents".
+    - Text mentions age range covering: "12 years", "10 years and above", or "puberty".
+
+3.  **Map to "Pediatric" if:**
+    - Text explicitly contains: "pediatric", "children", "infants".
+    - Text mentions age: "less than 10 years", "0 to [X] years".
+    - **CRITICAL CONSTRAINT:** Do NOT use "Pediatric" just because "Adolescent" is present. Only use "Pediatric" if the text explicitly covers children under 10/12.
+
+**Final Formatting:**
+- Join multiple matches with a comma (e.g., "Adult, Adolescent").
+- If no population is mentioned, valid output is null or inferred from context only if highly obvious, otherwise "_".
 
 ### **Disease + sybtypes**
 - **Source:** EXTRACT ONLY FROM "Indication_text".
@@ -415,7 +461,7 @@ output json format:
         "Disease + sybtypes": "neovascular (wet) age-related macular degeneration (AMD)"
     }
 ]
-"""
+"""  # Replace with your actual prompt
 
 # Function to clean JSON response
 # Function to clean JSON response
@@ -448,7 +494,7 @@ def call_gemini_api(text_data, prompt):
     """
     Call the Gemini API with the provided text and prompt
     """
-    PROJECT_ID = "ybrant-gemini-vertexai"  # Replace with your project ID
+    PROJECT_ID = "curate-cdp-test"  # Replace with your project ID
     LOCATION = os.environ.get("GOOGLE_CLOUD_REGION", "us-central1")
     
     client = genai.Client(

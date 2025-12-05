@@ -115,6 +115,9 @@ Your task is to analyze the provided EMA clinical text and convert it into a sin
 ### **Primary Disease_category**
 - **Source:** The bolded or capitalized header starting the section.
 - FALLBACK APPROACH - "If no explicit header exists, use the disease name found in the indication text as the Primary Category."
+- IF the Indication_text lists multiple distinct tumor types (e.g., "gastric, small intestine, or biliary cancer") that share the same treatment conditions, you MUST create a separate JSON object for each tumor type.
+- Bad Example: {"Disease": "gastric, small intestine, or biliary cancer"}
+- Good Example: [{"Disease": "gastric cancer"}, {"Disease": "small intestine cancer"}, {"Disease": "biliary cancer"}]
 - **Example:** "Melanoma", "Non-small cell lung cancer (NSCLC)".
 
 ### **Disease_level_full_text**

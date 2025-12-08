@@ -132,75 +132,66 @@ Your task is to analyze the provided EMA clinical text and convert it into a sin
 - **Constraint:** Stop extracting when the text moves to a new patient population or a different drug combination.
 
 ### **Treatment line**
-**Objective:** Determine the timing/sequence of this specific drug in the patient's treatment history.
-**Instructions:** Evaluate the `Indication_text` against the following rules in ORDER. Stop at the first match.
-1.  **Rule (First Line):**
-    - IF text contains: "first-line", "treatment naïve", "previously untreated", OR "no prior systemic therapy".
-    - OUTPUT: "First line"
-
-2.  **Rule (Calculated Line - The "+1" Logic):**
-    - IF text contains "after [Number] lines" or "after [Number] prior therapies":
-    - ACTION: Add 1 to the number found in text.
-    - EXAMPLE: "after 3 lines" -> Output: "Fourth line". "after 2 lines" -> Output: "Third line".
-
-3.  **Rule (Second Line / Relapsed / Refractory):**
-    - IF text contains: "second-line", "after prior chemotherapy", "after failure of", "progressing on", "relapsed", "refractory", OR "recurrence after".
-    - AND logic in Rule 2 (Calculated Line) did not apply.
-    - OUTPUT: "Second line"
-
-4.  **Rule (Adjuvant/Neoadjuvant Exception):**
-    - IF text is for "Adjuvant" or "Neoadjuvant" treatment AND no specific line (first/second) is mentioned.
-    - OUTPUT: "_"
-
-5.  **Rule (Default):**
-    - If none of the above match.
-    - OUTPUT: "_"
+- **Source:** EXTRACT ONLY FROM "Indication_text".
+- **Logic:**
+  - If text says "first-line": value is "First line".
+  - If the indication text explicitly contains the words “second-line” or “second line”, output: "Second line".
+  - If text says "after prior therapy", "after prior chemotherapy", "after failure of prior therapy", "after failure of platinum therapy", "progressing on or after", "disease progression following", "previously treated with", "relapsed after", "refractory after", "second-line": value is "Second line".
+  - If the indication text explicitly contains the words “third-line” or “third line”, output: "Third line".
+  - If the indication text clearly indicates two sequential prior treatments, output “Third line”.
+  - **Example:**“after autologous stem cell transplant and treatment with …”.
+  - **Example:**“after two or more prior therapies”.
+  - **Example:**“after both chemotherapy and targeted therapy”.
+  - If text mentions "Adjuvant" or "Neoadjuvant" without specifying a line: value is "_".
+  - If no line is mentioned: value is "_".
+  - Do not convert adjuvant or neoadjuvant into first or second line.
+  - Do NOT assign a treatment line based on drug class or clinical knowledge
+  - Only the words inside the Indication_text control Treatment line.
 
     
 ### **Treatment modality**
 - **Source:** EXTRACT ONLY FROM "Indication_text".
-**Objective:** Identify the configuration of the drug administration.
-**Instructions:** Scan `Indication_text` for keywords. If multiple categories match, separate them with a comma (e.g., "Combination, Neoadjuvant").
-1.  **Category: Combination**
-    - LOOK FOR: "in combination with", "combined with", "plus", "with [Drug Name]", "in addition to other medicinal products".
-    - NOTE: Do NOT count "adjunct to diet/exercise" as a Combination. Only count combination with other *drugs*.
-    - OUTPUT: "Combination"
-
-2.  **Category: Monotherapy**
-    - LOOK FOR: "monotherapy", "single agent".
-    - INFERENCE RULE: If the text says "Indicated for the treatment of [Disease]" and does NOT mention any other drug or combination, assume "Monotherapy".
-    - OUTPUT: "Monotherapy"
-
-3.  **Category: Adjuvant**
-    - LOOK FOR: "adjuvant" (appearing before surgery or resection mentions), "post-operative".
-    - OUTPUT: "Adjuvant"
-
-4.  **Category: Neoadjuvant**
-    - LOOK FOR: "neoadjuvant", "pre-operative".
-    - OUTPUT: "Neoadjuvant"
-
-5.  **Rule (Null):**
-    - If the indication is purely for "Weight Management" as adjunct to diet (without other drugs).
-    - OUTPUT: "_"
+- **Logic:** Look for these keywords and combine them with commas if multiple exist:
+  - "Monotherapy" (or implied if used alone).
+  - "Combination" (if the text contains “in combination with”; if used with ipilimumab, chemotherapy, etc.).
+  - "Adjuvant".
+  - "Neoadjuvant".
+  - If multiple modalities apply, combine them using commas in a single string.
+- **Example:** "Combination, Neoadjuvant"
 
     
 ### **Population**
 - **Source:** EXTRACT ONLY FROM "Indication_text".
-**Objective:** Map target demographics to standard values.
-**Instructions:** Extract only explicitly stated groups. Do not hallucinate.
-1.  **Map to "Adult" if:**
-    - Text contains: "adults", "men", "women", "elderly".
-    - Text mentions age: "18 years" or older.
+- **Logic:** Identify the target demographic.
+- Text-based population rules:
+  - If the text contains infant, neonate, or newborn, output “Infant”.
+  - If the text contains pediatric, paediatric, or children, output “Paediatric”.
+  - If the text contains adolescents, output “Adolescent”.
+  - If the text contains adults or adult patients, output “Adult”.
+  - If the text contains elderly, geriatric, or ≥ 65 years, output “Elderly”.
+- Numeric age-based population rules (mandatory):
+  - Age 0 to 1 years maps to “Infant”.
+  - Age greater than 1 and up to 12 years maps to “Pediatric”.
+  - Age greater than 12 and up to 18 years maps to “Adolescent”.
+  - Age greater than 18 and up to 60 years maps to “Adult”.
+  - Age greater than 60 years maps to “Elderly”.
+- Range overlap rules:
+  - If an age range spans multiple groups, include all applicable populations.
+  - **Example:** Age 10 to 14 outputs “Pediatric, Adolescent”.
+  - **Example:** Age 58 to 70 outputs “Adult, Elderly”.
+  - **Example:** ≥12 years outputs “Adolescent, Adult, Elderly”.
+- Population formatting rules:
+  - Only these exact values are allowed:
+    - Infant
+    - Paediatric
+    - Adolescent
+    - Adult
+    - Elderly
+  - If no text age and no numeric age is present, output “_”.
+  - Never default to Adult.
+  - Never guess the population.
 
-2.  **Map to "Adolescent" if:**
-    - Text contains: "adolescents".
-    - Text mentions age range covering: "12 years", "10 years and above", or "puberty".
-
-3.  **Map to "Pediatric" if:**
-    - Text explicitly contains: "pediatric", "children", "infants".
-    - Text mentions age: "less than 10 years", "0 to [X] years".
-    - **CRITICAL CONSTRAINT:** Do NOT use "Pediatric" just because "Adolescent" is present. Only use "Pediatric" if the text explicitly covers children under 10/12.
-
+  
 **Final Formatting:**
 - Join multiple matches with a comma (e.g., "Adult, Adolescent").
 - If no population is mentioned, valid output is null or inferred from context only if highly obvious, otherwise "_".
@@ -209,6 +200,47 @@ Your task is to analyze the provided EMA clinical text and convert it into a sin
 - **Source:** EXTRACT ONLY FROM "Indication_text".
 - **Logic:** Extract the specific condition description, stage, or mutation status mentioned.
 - **Example:** "unresectable or metastatic melanoma" or "tumours have PD-L1 expression >= 1%".
+
+Field: Disease + subtypes (Strict Cleaning Rules)
+Objective: Extract only the specific medical condition or patient state. Critical Rule: This field describes the PATIENT'S BODY, not the DRUG'S ACTION.
+
+Instructions to extract text for Disease+subtypes:
+
+Start by identifying the core disease name (e.g., "Type 2 diabetes mellitus", "Melanoma").
+
+Keep specific disease modifiers found immediately around the disease name:
+
+"insufficiently controlled"
+
+"metastatic", "advanced", "resectable", "unresectable"
+
+Specific genetic mutations (e.g., "PD-L1 positive", "BRAF V600 mutation")
+
+Risk levels (e.g., "at high risk of recurrence")
+
+REMOVE all text related to:
+
+Treatment Context: "as an adjunct to diet and exercise", "in combination with...", "as monotherapy".
+
+Rationale/Reasoning: "when metformin is considered inappropriate", "due to intolerance".
+
+Treatment History (unless part of the patient definition): "after failure of...", "progressing on...". ( Note: Only keep these if they define the patient group, like 'relapsed/refractory'. If it just describes the timing, leave it out.)
+
+Examples for Training:
+
+Text: "treatment of adults with insufficiently controlled type 2 diabetes mellitus as an adjunct to diet and exercise"
+
+Bad Extraction: "insufficiently controlled type 2 diabetes mellitus as an adjunct to diet and exercise"
+
+Good Extraction: "insufficiently controlled type 2 diabetes mellitus"
+
+Text: "treatment of advanced melanoma in adults progressing on platinum-based therapy"
+
+Good Extraction: "advanced melanoma" (Note: "progressing on..." is captured in Treatment Line, not Disease).
+
+Text: "treatment of adults with MSI-H colorectal cancer"
+
+Good Extraction: "MSI-H colorectal cancer"
 
 # Negative Constraints (To prevent Hallucination)
 1. DO NOT infer information. If the `Indication_text` does not state the Population, do not guess "Adult".

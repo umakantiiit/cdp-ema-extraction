@@ -133,20 +133,42 @@ Your task is to analyze the provided EMA clinical text and convert it into a sin
 
 ### **Treatment line**
 - **Source:** EXTRACT ONLY FROM "Indication_text".
-- **Logic:**
-  - If text says "first-line": value is "First line".
-  - If the indication text explicitly contains the words “second-line” or “second line”, output: "Second line".
-  - If text says "after prior therapy", "after prior chemotherapy", "after failure of prior therapy", "after failure of platinum therapy", "progressing on or after", "disease progression following", "previously treated with", "relapsed after", "refractory after", "second-line": value is "Second line".
-  - If the indication text explicitly contains the words “third-line” or “third line”, output: "Third line".
-  - If the indication text clearly indicates two sequential prior treatments, output “Third line”.
-  - **Example:**“after autologous stem cell transplant and treatment with …”.
-  - **Example:**“after two or more prior therapies”.
-  - **Example:**“after both chemotherapy and targeted therapy”.
-  - If text mentions "Adjuvant" or "Neoadjuvant" without specifying a line: value is "_".
-  - If no line is mentioned: value is "_".
-  - Do not convert adjuvant or neoadjuvant into first or second line.
-  - Do NOT assign a treatment line based on drug class or clinical knowledge
-  - Only the words inside the Indication_text control Treatment line.
+- **Logic (Evaluate in this specific order):**
+
+  1. **Rule (The "At Least" Range):**
+     - IF text contains "at least one" (or "≥ 1") prior therapy/treatment:
+       - OUTPUT: "Second line and later"
+     - IF text contains "at least two" (or "≥ 2") prior therapies:
+       - OUTPUT: "Third line and later"
+
+  2. **Rule (First Line):**
+     - IF text says "first-line", "previously untreated", "treatment naïve", OR "no prior systemic therapy".
+     - OUTPUT: "First line"
+
+  3. **Rule (Calculated Line - The "+1" Logic):**
+     - IF text says "after [Number] prior therapies" or "after [Number] lines" (e.g., "after 3 lines"):
+     - ACTION: Add 1 to the number found. (e.g., 3 + 1 = 4).
+     - OUTPUT: "[Result] line" (e.g., "Fourth line")
+
+  4. **Rule (Explicit Second/Third Label):**
+     - If text explicitly says "second-line" -> OUTPUT: "Second line".
+     - If text explicitly says "third-line" -> OUTPUT: "Third line".
+
+  5. **Rule (General Second Line / Relapsed / Refractory):**
+     - IF text contains any of the following:
+       - "after prior therapy", "after prior chemotherapy"
+       - "after failure of...", "progressing on or after..."
+       - "relapsed", "refractory"
+       - "previously treated with"
+     - OUTPUT: "Second line"
+
+  6. **Rule (Adjuvant/Neoadjuvant Exception):**
+     - IF text mentions "Adjuvant" or "Neoadjuvant" AND does not specify a line number.
+     - OUTPUT: "_"
+
+  7. **Rule (Default):**
+     - If none of the above match.
+     - OUTPUT: "_"
 
     
 ### **Treatment modality**
@@ -529,7 +551,7 @@ def call_gemini_api(text_data, prompt):
     """
     Call the Gemini API with the provided text and prompt
     """
-    PROJECT_ID = "curate-cdp-test"  # Replace with your project ID
+    PROJECT_ID = "moonlit-creek-480004-i3"  # Replace with your project ID
     LOCATION = os.environ.get("GOOGLE_CLOUD_REGION", "us-central1")
     
     client = genai.Client(

@@ -119,6 +119,7 @@ Your task is to analyze the provided EMA clinical text and convert it into a sin
 - Bad Example: {"Disease": "gastric, small intestine, or biliary cancer"}
 - Good Example: [{"Disease": "gastric cancer"}, {"Disease": "small intestine cancer"}, {"Disease": "biliary cancer"}]
 - **Example:** "Melanoma", "Non-small cell lung cancer (NSCLC)".
+- DONOT SPLIT THE PRIMARY DISEASE IF ONLY Treatment modality DIFFERS and everything else is same. 
 
 ### **Disease_level_full_text**
 - **Source:** The entire text block belonging to that Primary Disease Category.
@@ -156,6 +157,7 @@ Your task is to analyze the provided EMA clinical text and convert it into a sin
 
   5. **Rule (General Second Line / Relapsed / Refractory):**
      - IF text contains any of the following:
+       - "considered inappropriate (example- metformin is considered inappropriate means the patient fails with that therapy.)
        - "after prior therapy", "after prior chemotherapy"
        - "after failure of...", "progressing on or after..."
        - "relapsed", "refractory"
@@ -170,18 +172,33 @@ Your task is to analyze the provided EMA clinical text and convert it into a sin
      - If none of the above match.
      - OUTPUT: "_"
 
-    
+
 ### **Treatment modality**
 - **Source:** EXTRACT ONLY FROM "Indication_text".
 - **Logic:** Look for these keywords and combine them with commas if multiple exist:
   - "Monotherapy" (or implied if used alone).
   - "Combination" (if the text contains “in combination with”; if used with ipilimumab, chemotherapy, etc.).
-  - "Adjuvant".
-  - "Neoadjuvant".
   - If multiple modalities apply, combine them using commas in a single string.
 - **Example:** "Combination, Neoadjuvant"
+- Adjunct detection rules (FOR LEQVIO AND SIMILAR DRUGS):
+  - If the indication text contains any of the following phrases, include “Adjunct”:
+  - “as an adjunct to diet”
+  - “as an adjunct to therapy”
+  - “adjunctive therapy”
+  - “used as an adjunct”
+  - Adjunct refers to add-on supportive use, not treatment sequencing.
+  - Adjunct must be included independently of Monotherapy or Combination when applicable.
+- Neoadjuvant detection rules:
+  - If the indication text contains “neoadjuvant treatment” or “as neoadjuvant”, include “Neoadjuvant”.
+- Adjuvant detection rules:
+  - If the indication text contains “adjuvant treatment” or “as adjuvant”, include “Adjuvant”.
+- Multiple modality combination rules:
+  - If Adjunct + Combination → output “Adjunct, Combination”.
+  - If Adjunct + Monotherapy → output “Adjunct, Monotherapy”.
+  - If Adjunct + Monotherapy + Combination → output “Adjunct, Monotherapy, Combination”.
+  - If Neoadjuvant followed by Adjuvant with different modalities → output: “Neoadjuvant, Adjuvant, Combination, Monotherapy”.
 
-    
+
 ### **Population**
 - **Source:** EXTRACT ONLY FROM "Indication_text".
 - **Logic:** Identify the target demographic.
@@ -213,7 +230,7 @@ Your task is to analyze the provided EMA clinical text and convert it into a sin
   - Never default to Adult.
   - Never guess the population.
 
-  
+
 **Final Formatting:**
 - Join multiple matches with a comma (e.g., "Adult, Adolescent").
 - If no population is mentioned, valid output is null or inferred from context only if highly obvious, otherwise "_".
@@ -551,7 +568,7 @@ def call_gemini_api(text_data, prompt):
     """
     Call the Gemini API with the provided text and prompt
     """
-    PROJECT_ID = "moonlit-creek-480004-i3"  # Replace with your project ID
+    PROJECT_ID = "ybrant-gemini-vertexai"  # Replace with your project ID
     LOCATION = os.environ.get("GOOGLE_CLOUD_REGION", "us-central1")
     
     client = genai.Client(
@@ -565,7 +582,7 @@ def call_gemini_api(text_data, prompt):
     generate_config = types.GenerateContentConfig(
         temperature=0,
         thinking_config=types.ThinkingConfig(
-            thinking_budget=2000
+            thinking_budget=2500
         )
     )
     

@@ -213,12 +213,12 @@ Your task is to analyze the provided EMA clinical text and convert it into a sin
   - Age greater than 1 and up to 12 years maps to “Pediatric”.
   - Age greater than 12 and up to 18 years maps to “Adolescent”.
   - Age greater than 18 and up to 60 years maps to “Adult”.
-  - Age greater than 60 years maps to “Elderly”.
+  - Only output Elderly if it is specified in the indication text ( valid for more than 60 years)
 - Range overlap rules:
   - If an age range spans multiple groups, include all applicable populations.
   - **Example:** Age 10 to 14 outputs “Pediatric, Adolescent”.
-  - **Example:** Age 58 to 70 outputs “Adult, Elderly”.
-  - **Example:** ≥12 years outputs “Adolescent, Adult, Elderly”.
+  - **Example:** Age 58 to 70 outputs “Adult”.
+  - **Example:** ≥12 years outputs “Adolescent, Adult”.
 - Population formatting rules:
   - Only these exact values are allowed:
     - Infant
@@ -280,6 +280,8 @@ Good Extraction: "advanced melanoma" (Note: "progressing on..." is captured in T
 Text: "treatment of adults with MSI-H colorectal cancer"
 
 Good Extraction: "MSI-H colorectal cancer"
+
+DONOT EXTRACT TEXT WHICH WE HAVE ALREADY EXTRACT IN POPULATION , TREATMENT MODALITY AND TREATMENT LINE. 
 
 # Negative Constraints (To prevent Hallucination)
 1. DO NOT infer information. If the `Indication_text` does not state the Population, do not guess "Adult".

@@ -197,6 +197,8 @@ Your task is to analyze the provided EMA clinical text and convert it into a sin
   - If Adjunct + Monotherapy → output “Adjunct, Monotherapy”.
   - If Adjunct + Monotherapy + Combination → output “Adjunct, Monotherapy, Combination”.
   - If Neoadjuvant followed by Adjuvant with different modalities → output: “Neoadjuvant, Adjuvant, Combination, Monotherapy”.
+  IMPORTANT 
+  IF NO TREATMENT MODALITY ARE MENTIONED THEN DONOT ASSUME IT AS MONOTHERAPY. KEEP IT AS "_"
 
 
 ### **Population**

@@ -95,7 +95,7 @@ data_input = st.text_area(
 )
 
 # Define your prompt (replace with your actual prompt)
-cdp_ema_prompt = """
+ema_prompt = """
 # Role and Persona
 You are an expert Clinical Data Analyst and Regulatory Affairs Specialist specializing in Pharmacovigilance. Your expertise lies in parsing complex medical texts from the European Medicines Agency (EMA) and extracting highly structured data with zero error. You do not summarize; you extract exactly what is stated.
 
@@ -119,7 +119,7 @@ Your task is to analyze the provided EMA clinical text and convert it into a sin
 - Bad Example: {"Disease": "gastric, small intestine, or biliary cancer"}
 - Good Example: [{"Disease": "gastric cancer"}, {"Disease": "small intestine cancer"}, {"Disease": "biliary cancer"}]
 - **Example:** "Melanoma", "Non-small cell lung cancer (NSCLC)".
-- DONOT SPLIT THE PRIMARY DISEASE IF ONLY Treatment modality DIFFERS and everything else is same. 
+- DONOT SPLIT THE PRIMARY DISEASE IF ONLY Treatment modality DIFFERS and everything else is same.
 
 ### **Disease_level_full_text**
 - **Source:** The entire text block belonging to that Primary Disease Category.
@@ -197,7 +197,7 @@ Your task is to analyze the provided EMA clinical text and convert it into a sin
   - If Adjunct + Monotherapy → output “Adjunct, Monotherapy”.
   - If Adjunct + Monotherapy + Combination → output “Adjunct, Monotherapy, Combination”.
   - If Neoadjuvant followed by Adjuvant with different modalities → output: “Neoadjuvant, Adjuvant, Combination, Monotherapy”.
-  IMPORTANT 
+  IMPORTANT
   IF NO TREATMENT MODALITY ARE MENTIONED THEN DONOT ASSUME IT AS MONOTHERAPY. KEEP IT AS "_"
 
 
@@ -283,7 +283,140 @@ Text: "treatment of adults with MSI-H colorectal cancer"
 
 Good Extraction: "MSI-H colorectal cancer"
 
-DONOT EXTRACT TEXT WHICH WE HAVE ALREADY EXTRACT IN POPULATION , TREATMENT MODALITY AND TREATMENT LINE. 
+DONOT EXTRACT TEXT WHICH WE HAVE ALREADY EXTRACT IN POPULATION , TREATMENT MODALITY AND TREATMENT LINE.
+
+### **Severity_or_Stage**
+- **Source:** EXTRACT ONLY FROM "Indication_text".
+- **Logic:** Extract descriptors that specifically characterize the severity, clinical stage, or disease progression state of the patient's condition at the time this treatment is indicated.
+
+**Include the following categories of descriptors:**
+- Oncology staging: "Stage I", "Stage II", "Stage IIB", "Stage IIC", "Stage III", "Stage IV", and any sub-stage variants (e.g., "Stage IIIA").
+- Disease extent / resectability status: "metastatic", "locally advanced", "advanced", "unresectable", "resectable", "muscle invasive", "locally advanced unresectable".
+- Disease activity descriptors: "relapsed", "refractory", "relapsed or refractory", "recurrent", "recurrent or metastatic".
+- Risk categorization: "at high risk of recurrence", "intermediate/poor-risk", "high risk".
+- Pathological states: "residual pathologic disease".
+- General severity levels (non-oncology): "mild", "moderate", "mild to moderate", "severe", "end-stage", "decompensated".
+
+**Extraction Rules:**
+1. Extract ALL applicable severity/stage terms found in the Indication_text and join them with ", ".
+2. If multiple distinct terms apply (e.g., "unresectable" and "metastatic"), include both.
+3. If only a broad descriptor like "advanced" is present with no further staging, extract "advanced".
+4. Do NOT copy the full disease name — extract only the severity/stage portion.
+5. Do NOT include biomarker or genetic information here — those belong in `Biomarkers_and_Genetics`.
+6. Do NOT include treatment history phrases (e.g., "after prior therapy") — those belong in `Prior_Therapy_Requirements`.
+7. Do NOT include population (age/demographic) information.
+8. If no staging or severity information is present in the Indication_text, output "_".
+
+**Examples:**
+- Text: "unresectable or metastatic melanoma" → Output: "unresectable or metastatic"
+- Text: "Stage IIB or IIC melanoma, or melanoma with involvement of lymph nodes or metastatic disease" → Output: "Stage IIB or IIC, metastatic"
+- Text: "locally advanced or metastatic non-small cell lung cancer" → Output: "locally advanced or metastatic"
+- Text: "intermediate/poor-risk advanced renal cell carcinoma" → Output: "intermediate/poor-risk, advanced"
+- Text: "resectable non-small cell lung cancer at high risk of recurrence" → Output: "resectable, at high risk of recurrence"
+- Text: "relapsed or refractory classical Hodgkin lymphoma" → Output: "relapsed or refractory"
+- Text: "neovascular (wet) age-related macular degeneration" → Output: "_" (no staging/severity present)
+
+### **Biomarkers_and_Genetics**
+- **Source:** EXTRACT ONLY FROM "Indication_text".
+- **Logic:** Extract molecular markers, receptor expression levels, genetic mutations, chromosomal alterations, mismatch repair status, microbial/pathogen markers, or any other biological/laboratory criteria that determine patient eligibility.
+**Include the following categories:**
+- Receptor/protein expression: "PD-L1 expression ≥ 1%", "tumour cell PD-L1 expression ≥ 1%", "PD-L1 with a combined positive score (CPS) ≥ 5", "HER2-negative", "HER2-positive".
+- Genetic mutations / alterations: "EGFR mutation", "no sensitising EGFR mutation", "ALK translocation", "no ALK translocation", "BRAF V600 mutation", "BRCA mutated", "RAS mutation".
+- Genomic instability / repair markers: "mismatch repair deficient (dMMR)", "microsatellite instability-high (MSI-H)".
+- Microbial / pathogen markers (non-oncology): "H. pylori positive", "Gram-positive bacteria", "culture-confirmed infection".
+- Any other explicitly stated biomarker threshold or molecular test result that defines patient eligibility.
+
+**Extraction Rules:**
+1. Extract ALL biomarker/genetic criteria found in the Indication_text and join them with ", ".
+2. Preserve the exact quantitative thresholds as stated (e.g., "≥ 1%", "CPS ≥ 5") — do not round or paraphrase.
+3. If a biomarker is stated as NEGATIVE or ABSENT (e.g., "no sensitising EGFR mutation", "HER2-negative"), preserve that negation exactly.
+4. Do NOT include disease stage or severity here — those belong in `Severity_or_Stage`.
+5. Do NOT include treatment history, concurrent therapies, or population information.
+6. Do NOT infer biomarker requirements — only extract what is explicitly stated in the Indication_text.
+7. If no biomarker or genetic information is present in the Indication_text, output "_".
+
+**Examples:**
+- Text: "whose tumours have no sensitising EGFR mutation or ALK translocation" → Output: "no sensitising EGFR mutation, no ALK translocation"
+- Text: "whose tumours have PD-L1 expression ≥ 1%" → Output: "PD-L1 expression ≥ 1%"
+- Text: "tumour cell PD-L1 expression ≥ 1%, who are at high risk of recurrence" → Output: "tumour cell PD-L1 expression ≥ 1%"
+- Text: "whose tumours express PD-L1 with a combined positive score (CPS) ≥ 5" → Output: "PD-L1 CPS ≥ 5"
+- Text: "HER2-negative advanced or metastatic gastric...adenocarcinoma" → Output: "HER2-negative"
+- Text: "mismatch repair deficient or microsatellite instability-high colorectal cancer" → Output: "mismatch repair deficient (dMMR), microsatellite instability-high (MSI-H)"
+- Text: "unresectable malignant pleural mesothelioma" → Output: "_" (no biomarkers present)
+
+### **Prior_Therapy_Requirements**
+- **Source:** EXTRACT ONLY FROM "Indication_text".
+- **Logic:** Extract any mandatory prior treatment(s) the patient MUST have already received — or failed, progressed on, or been exposed to — before this therapy is indicated. This captures the HISTORY of the patient's prior treatment journey.
+
+**Include the following patterns:**
+- "after prior [therapy name]" (e.g., "after prior chemotherapy", "after prior platinum-containing therapy")
+- "after failure of [therapy]"
+- "progressing on or after [therapy]"
+- "after [therapy] considered inappropriate" (implies failure/intolerance of that therapy)
+- "after autologous stem cell transplant (ASCT)"
+- "after treatment with [drug name]" (where the treatment is prior, not concurrent)
+- "following prior [procedure/therapy]" (e.g., "following prior neoadjuvant chemoradiotherapy")
+- "after undergoing [procedure]" (e.g., "after undergoing radical resection")
+- Explicit prior therapy count: "after [number] prior therapies/lines"
+
+**Extraction Rules:**
+1. Extract the specific prior therapy or procedure name, not just the trigger phrase.
+   - Good: "prior platinum-containing therapy"
+   - Bad: "after failure of prior therapy" (too vague — extract the therapy name)
+2. If the prior therapy name cannot be specifically identified, extract the full relevant phrase verbatim.
+3. If multiple prior therapies are required (e.g., "ASCT and brentuximab vedotin"), list all, joined with ", ".
+4. CRITICAL DISTINCTION — Do NOT confuse with `Required_Concurrent_Therapies`:
+   - `Prior_Therapy_Requirements` = treatments the patient has ALREADY received BEFORE starting this drug.
+   - `Required_Concurrent_Therapies` = treatments the patient receives AT THE SAME TIME as this drug.
+5. Do NOT include adjuvant/neoadjuvant procedures that are part of the current treatment regimen being described.
+6. Do NOT include disease stage, biomarkers, or population.
+7. If no prior therapy requirement is stated in the Indication_text, output "_".
+
+**Examples:**
+- Text: "after prior chemotherapy in adults" → Output: "prior chemotherapy"
+- Text: "after failure of prior platinum-containing therapy" → Output: "prior platinum-containing therapy"
+- Text: "progressing on or after platinum-based therapy" → Output: "platinum-based therapy"
+- Text: "after autologous stem cell transplant (ASCT) and treatment with brentuximab vedotin" → Output: "autologous stem cell transplant (ASCT), brentuximab vedotin"
+- Text: "following prior neoadjuvant chemoradiotherapy" → Output: "prior neoadjuvant chemoradiotherapy"
+- Text: "after prior fluoropyrimidine-based combination chemotherapy" → Output: "prior fluoropyrimidine-based combination chemotherapy"
+- Text: "after undergoing radical resection of MIUC" → Output: "radical resection of MIUC"
+- Text: "first-line treatment of adult patients with unresectable malignant pleural mesothelioma" → Output: "_" (no prior therapy required)
+
+### **Required_Concurrent_Therapies**
+- **Source:** EXTRACT ONLY FROM "Indication_text".
+- **Logic:** Extract the name(s) of any drug(s), regimen(s), or therapy(ies) that MUST be administered simultaneously with the drug being described as a mandatory part of this specific indication. This is derived exclusively from "in combination with [therapy]" constructs where the combination is obligatory — not optional.
+
+**Include:**
+- Specific drug names from "in combination with [drug]" (e.g., "ipilimumab", "cisplatin and gemcitabine", "platinum-based chemotherapy")
+- Chemotherapy regimens that are explicitly stated as mandatory co-administration (e.g., "fluoropyrimidine- and platinum-based combination chemotherapy")
+- Backbone therapies named as required add-ons (non-oncology examples: "metformin", "diet and exercise regimens" if stated as mandatory)
+
+**Extraction Rules:**
+1. ONLY extract concurrent therapies when the combination is MANDATORY — i.e., the indication text says "in combination with [X]" without offering a monotherapy alternative in the same indication sentence.
+2. OPTIONAL COMBINATION RULE — CRITICAL: If the same indication sentence says "as monotherapy OR in combination with [X]", then [X] is NOT required → output "_".
+   - Bad: Extracting "ipilimumab" from "OPDIVO as monotherapy or in combination with ipilimumab..."
+   - Good: Output "_" because the combination is optional, not required.
+3. If the indication is explicitly a combination-only regimen (no "OR monotherapy" alternative), extract the co-therapy name(s).
+4. Extract the name of the concurrent agent(s) only — do not include the trigger phrase "in combination with".
+   - Good: "ipilimumab"
+   - Bad: "in combination with ipilimumab"
+5. If multiple concurrent agents are required, join them with ", ".
+   - Example: "cisplatin, gemcitabine"
+6. CRITICAL DISTINCTION — Do NOT confuse with `Prior_Therapy_Requirements`:
+   - `Required_Concurrent_Therapies` = given AT THE SAME TIME as the drug.
+   - `Prior_Therapy_Requirements` = given BEFORE the drug.
+7. Do NOT include therapies that appear only in the disease-level text but not in the specific Indication_text.
+8. If no mandatory concurrent therapy is present in the Indication_text, output "_".
+
+**Examples:**
+- Text: "OPDIVO as monotherapy or in combination with ipilimumab is indicated for..." → Output: "_" (optional, not required)
+- Text: "OPDIVO in combination with ipilimumab is indicated for the first-line treatment of..." → Output: "ipilimumab"
+- Text: "OPDIVO in combination with ipilimumab and 2 cycles of platinum-based chemotherapy is indicated for..." → Output: "ipilimumab, platinum-based chemotherapy"
+- Text: "OPDIVO in combination with cisplatin and gemcitabine is indicated for..." → Output: "cisplatin, gemcitabine"
+- Text: "OPDIVO in combination with fluoropyrimidine- and platinum-based combination chemotherapy is indicated for..." → Output: "fluoropyrimidine- and platinum-based combination chemotherapy"
+- Text: "OPDIVO as monotherapy is indicated for the treatment of..." → Output: "_"
+- Text: "OPDIVO, in combination with platinum-based chemotherapy as neoadjuvant treatment, followed by OPDIVO as monotherapy as adjuvant treatment..." → Output: "platinum-based chemotherapy (neoadjuvant phase)"
+
 
 # Negative Constraints (To prevent Hallucination)
 1. DO NOT infer information. If the `Indication_text` does not state the Population, do not guess "Adult".
@@ -306,7 +439,11 @@ output json format:
         "Treatment line": "_",
         "Treatment modality": "Monotherapy,Combination",
         "Population": "Adult, Adolescent",
-        "Disease + sybtypes": "advanced (unresectable or metastatic)"
+        "Disease + sybtypes": "advanced (unresectable or metastatic)",
+        "Severity_or_Stage": "advanced, unresectable or metastatic",
+        "Biomarkers_and_Genetics": "_",
+        "Prior_Therapy_Requirements": "_",
+        "Required_Concurrent_Therapies": "_"
     },
     {
         "Primary Disease_category": "Melanoma",
@@ -316,7 +453,11 @@ output json format:
         "Treatment line": "_",
         "Treatment modality": "Adjuvant, Monotherapy",
         "Population": "Adult, Adolescent",
-        "Disease + sybtypes": "Stage IIB or IIC melanoma, or melanoma with involvement of lymph nodes or metastatic disease"
+        "Disease + sybtypes": "Stage IIB or IIC melanoma, or melanoma with involvement of lymph nodes or metastatic disease",
+        "Severity_or_Stage": "Stage IIB or IIC, metastatic",
+        "Biomarkers_and_Genetics": "_",
+        "Prior_Therapy_Requirements": "_",
+        "Required_Concurrent_Therapies": "_"
     },
     {
         "Primary Disease_category": "Non-small cell lung cancer (NSCLC)",
@@ -326,7 +467,11 @@ output json format:
         "Treatment line": "First line",
         "Treatment modality": "Combination",
         "Population": "Adult",
-        "Disease + sybtypes": "non-small cell lung cancer in adults whose tumours have no sensitising EGFR mutation or ALK translocation"
+        "Disease + sybtypes": "non-small cell lung cancer in adults whose tumours have no sensitising EGFR mutation or ALK translocation",
+        "Severity_or_Stage": "metastatic",
+        "Biomarkers_and_Genetics": "no sensitising EGFR mutation, no ALK translocation",
+        "Prior_Therapy_Requirements": "_",
+        "Required_Concurrent_Therapies": "ipilimumab, platinum-based chemotherapy"
     },
     {
         "Primary Disease_category": "Non-small cell lung cancer (NSCLC)",
@@ -336,7 +481,11 @@ output json format:
         "Treatment line": "Second line",
         "Treatment modality": "Monotherapy",
         "Population": "Adult",
-        "Disease + sybtypes": "locally advanced or metastatic non-small \ncell lung cancer"
+        "Disease + sybtypes": "locally advanced or metastatic non-small \ncell lung cancer",
+        "Severity_or_Stage": "locally advanced or metastatic",
+        "Biomarkers_and_Genetics": "_",
+        "Prior_Therapy_Requirements": "prior chemotherapy",
+        "Required_Concurrent_Therapies": "_"
     },
     {
         "Primary Disease_category": "Non-small cell lung cancer (NSCLC)",
@@ -346,7 +495,11 @@ output json format:
         "Treatment line": "_",
         "Treatment modality": "Combination, Neoadjuvant",
         "Population": "Adult",
-        "Disease + sybtypes": "resectable non-small cell lung cancer at high risk of recurrence"
+        "Disease + sybtypes": "resectable non-small cell lung cancer at high risk of recurrence",
+        "Severity_or_Stage": "resectable, at high risk of recurrence",
+        "Biomarkers_and_Genetics": "PD-L1 expression ≥ 1%",
+        "Prior_Therapy_Requirements": "_",
+        "Required_Concurrent_Therapies": "platinum-based chemotherapy"
     },
     {
         "Primary Disease_category": "Non-small cell lung cancer (NSCLC)",
@@ -356,7 +509,11 @@ output json format:
         "Treatment line": "_",
         "Treatment modality": "Combination, Neoadjuvant, Adjuvant, Monotherapy",
         "Population": "Adult",
-        "Disease + sybtypes": "resectable non-small \ncell lung cancer at high risk of recurrence"
+        "Disease + sybtypes": "resectable non-small \ncell lung cancer at high risk of recurrence",
+        "Severity_or_Stage": "resectable, at high risk of recurrence",
+        "Biomarkers_and_Genetics": "PD-L1 expression ≥ 1%",
+        "Prior_Therapy_Requirements": "_",
+        "Required_Concurrent_Therapies": "platinum-based chemotherapy (neoadjuvant phase)"
     },
     {
         "Primary Disease_category": "Malignant pleural mesothelioma (MPM)",
@@ -366,7 +523,11 @@ output json format:
         "Treatment line": "First line",
         "Treatment modality": "Combination",
         "Population": "Adult",
-        "Disease + sybtypes": "unresectable malignant pleural mesothelioma"
+        "Disease + sybtypes": "unresectable malignant pleural mesothelioma",
+        "Severity_or_Stage": "unresectable",
+        "Biomarkers_and_Genetics": "_",
+        "Prior_Therapy_Requirements": "_",
+        "Required_Concurrent_Therapies": "ipilimumab"
     },
     {
         "Primary Disease_category": "Renal cell carcinoma (RCC)",
@@ -376,7 +537,11 @@ output json format:
         "Treatment line": "Second line",
         "Treatment modality": "Monotherapy",
         "Population": "Adult",
-        "Disease + sybtypes": "advanced renal cell carcinoma"
+        "Disease + sybtypes": "advanced renal cell carcinoma",
+        "Severity_or_Stage": "advanced",
+        "Biomarkers_and_Genetics": "_",
+        "Prior_Therapy_Requirements": "prior therapy",
+        "Required_Concurrent_Therapies": "_"
     },
     {
         "Primary Disease_category": "Renal cell carcinoma (RCC)",
@@ -386,7 +551,11 @@ output json format:
         "Treatment line": "First line",
         "Treatment modality": "Combination",
         "Population": "Adult",
-        "Disease + sybtypes": "intermediate/poor-risk advanced renal cell carcinoma"
+        "Disease + sybtypes": "intermediate/poor-risk advanced renal cell carcinoma",
+        "Severity_or_Stage": "intermediate/poor-risk, advanced",
+        "Biomarkers_and_Genetics": "_",
+        "Prior_Therapy_Requirements": "_",
+        "Required_Concurrent_Therapies": "ipilimumab"
     },
     {
         "Primary Disease_category": "Renal cell carcinoma (RCC)",
@@ -396,7 +565,11 @@ output json format:
         "Treatment line": "First line",
         "Treatment modality": "Combination",
         "Population": "Adult",
-        "Disease + sybtypes": "advanced renal cell carcinoma"
+        "Disease + sybtypes": "advanced renal cell carcinoma",
+        "Severity_or_Stage": "advanced",
+        "Biomarkers_and_Genetics": "_",
+        "Prior_Therapy_Requirements": "_",
+        "Required_Concurrent_Therapies": "cabozantinib"
     },
     {
         "Primary Disease_category": "Classical Hodgkin lymphoma (cHL)",
@@ -406,7 +579,11 @@ output json format:
         "Treatment line": "Third line",
         "Treatment modality": "Monotherapy",
         "Population": "Adult",
-        "Disease + sybtypes": "relapsed or refractory classical Hodgkin lymphoma"
+        "Disease + sybtypes": "relapsed or refractory classical Hodgkin lymphoma",
+        "Severity_or_Stage": "relapsed or refractory",
+        "Biomarkers_and_Genetics": "_",
+        "Prior_Therapy_Requirements": "autologous stem cell transplant (ASCT), brentuximab vedotin",
+        "Required_Concurrent_Therapies": "_"
     },
     {
         "Primary Disease_category": "Squamous cell cancer of the head and neck (SCCHN)",
@@ -416,7 +593,11 @@ output json format:
         "Treatment line": "Second line",
         "Treatment modality": "Monotherapy",
         "Population": "Adult",
-        "Disease + sybtypes": "recurrent or metastatic squamous cell cancer of the head and neck"
+        "Disease + sybtypes": "recurrent or metastatic squamous cell cancer of the head and neck",
+        "Severity_or_Stage": "recurrent or metastatic",
+        "Biomarkers_and_Genetics": "_",
+        "Prior_Therapy_Requirements": "platinum-based therapy",
+        "Required_Concurrent_Therapies": "_"
     },
     {
         "Primary Disease_category": "Urothelial carcinoma",
@@ -426,7 +607,11 @@ output json format:
         "Treatment line": "First line",
         "Treatment modality": "Combination",
         "Population": "Adult",
-        "Disease + sybtypes": "unresectable or metastatic urothelial carcinoma"
+        "Disease + sybtypes": "unresectable or metastatic urothelial carcinoma",
+         "Severity_or_Stage": "unresectable or metastatic",
+        "Biomarkers_and_Genetics": "_",
+        "Prior_Therapy_Requirements": "_",
+        "Required_Concurrent_Therapies": "cisplatin, gemcitabine"
     },
     {
         "Primary Disease_category": "Urothelial carcinoma",
@@ -436,7 +621,11 @@ output json format:
         "Treatment line": "Second line",
         "Treatment modality": "Monotherapy",
         "Population": "Adult",
-        "Disease + sybtypes": "locally advanced unresectable or metastatic urothelial carcinoma"
+        "Disease + sybtypes": "locally advanced unresectable or metastatic urothelial carcinoma",
+         "Severity_or_Stage": "locally advanced unresectable or metastatic",
+        "Biomarkers_and_Genetics": "_",
+        "Prior_Therapy_Requirements": "prior platinum-containing therapy",
+        "Required_Concurrent_Therapies": "_"
     },
     {
         "Primary Disease_category": "Urothelial carcinoma",
@@ -446,7 +635,11 @@ output json format:
         "Treatment line": "Second line",
         "Treatment modality": "Monotherapy,Adjuvant",
         "Population": "Adult",
-        "Disease + sybtypes": "muscle invasive urothelial carcinoma (MIUC) with tumour cell PD-L1 expression \u2265 1%, who are at high risk of recurrence"
+        "Disease + sybtypes": "muscle invasive urothelial carcinoma (MIUC) with tumour cell PD-L1 expression \u2265 1%, who are at high risk of recurrence",
+        "Severity_or_Stage": "muscle invasive, at high risk of recurrence",
+        "Biomarkers_and_Genetics": "tumour cell PD-L1 expression ≥ 1%",
+        "Prior_Therapy_Requirements": "radical resection of MIUC",
+        "Required_Concurrent_Therapies": "_"
     },
     {
         "Primary Disease_category": "Mismatch repair deficient (dMMR) or microsatellite instability-high (MSI-H) colorectal cancer (CRC)",
@@ -456,7 +649,11 @@ output json format:
         "Treatment line": "First line",
         "Treatment modality": "Combination",
         "Population": "Adult",
-        "Disease + sybtypes": "unresectable or metastatic colorectal cancer"
+        "Disease + sybtypes": "unresectable or metastatic colorectal cancer",
+        "Severity_or_Stage": "unresectable or metastatic",
+        "Biomarkers_and_Genetics": "mismatch repair deficient (dMMR), microsatellite instability-high (MSI-H)",
+        "Prior_Therapy_Requirements": "_",
+        "Required_Concurrent_Therapies": "ipilimumab"
     },
     {
         "Primary Disease_category": "Mismatch repair deficient (dMMR) or microsatellite instability-high (MSI-H) colorectal cancer (CRC)",
@@ -466,7 +663,11 @@ output json format:
         "Treatment line": "Second line",
         "Treatment modality": "Combination",
         "Population": "Adult",
-        "Disease + sybtypes": "metastatic colorectal cancer"
+        "Disease + sybtypes": "metastatic colorectal cancer",
+        "Severity_or_Stage": "metastatic",
+        "Biomarkers_and_Genetics": "mismatch repair deficient (dMMR), microsatellite instability-high (MSI-H)",
+        "Prior_Therapy_Requirements": "prior fluoropyrimidine-based combination chemotherapy",
+        "Required_Concurrent_Therapies": "ipilimumab"
     },
     {
         "Primary Disease_category": "Oesophageal squamous cell carcinoma (OSCC)",
@@ -476,7 +677,11 @@ output json format:
         "Treatment line": "First line",
         "Treatment modality": "Combination",
         "Population": "Adult",
-        "Disease + sybtypes": "unresectable advanced, recurrent or metastatic oesophageal squamous cell carcinoma"
+        "Disease + sybtypes": "unresectable advanced, recurrent or metastatic oesophageal squamous cell carcinoma",
+        "Severity_or_Stage": "unresectable advanced, recurrent or metastatic",
+        "Biomarkers_and_Genetics": "tumour cell PD-L1 expression ≥ 1%",
+        "Prior_Therapy_Requirements": "_",
+        "Required_Concurrent_Therapies": "ipilimumab"
     },
     {
         "Primary Disease_category": "Oesophageal squamous cell carcinoma (OSCC)",
@@ -486,7 +691,11 @@ output json format:
         "Treatment line": "First line",
         "Treatment modality": "Combination",
         "Population": "Adult",
-        "Disease + sybtypes": "unresectable advanced, recurrent or metastatic oesophageal squamous cell carcinoma"
+        "Disease + sybtypes": "unresectable advanced, recurrent or metastatic oesophageal squamous cell carcinoma",
+        "Severity_or_Stage": "unresectable advanced, recurrent or metastatic",
+        "Biomarkers_and_Genetics": "tumour cell PD-L1 expression ≥ 1%",
+        "Prior_Therapy_Requirements": "_",
+        "Required_Concurrent_Therapies": "fluoropyrimidine- and platinum-based combination chemotherapy"
     },
     {
         "Primary Disease_category": "Oesophageal squamous cell carcinoma (OSCC)",
@@ -496,7 +705,11 @@ output json format:
         "Treatment line": "Second line",
         "Treatment modality": "Monotherapy",
         "Population": "Adult",
-        "Disease + sybtypes": "unresectable advanced, recurrent or metastatic oesophageal squamous cell carcinoma"
+        "Disease + sybtypes": "unresectable advanced, recurrent or metastatic oesophageal squamous cell carcinoma",
+        "Severity_or_Stage": "unresectable advanced, recurrent or metastatic",
+        "Biomarkers_and_Genetics": "_",
+        "Prior_Therapy_Requirements": "prior fluoropyrimidine- and platinum-based combination chemotherapy",
+        "Required_Concurrent_Therapies": "_"
     },
     {
         "Primary Disease_category": "Oesophageal or gastro-oesophageal junction cancer (OC or GEJC)",
@@ -506,7 +719,11 @@ output json format:
         "Treatment line": "Second line",
         "Treatment modality": "Monotherapy,Adjuvant",
         "Population": "Adult",
-        "Disease + sybtypes": "oesophageal or gastro-oesophageal junction cancer who have residual pathologic disease"
+        "Disease + sybtypes": "oesophageal or gastro-oesophageal junction cancer who have residual pathologic disease",
+        "Severity_or_Stage": "residual pathologic disease",
+        "Biomarkers_and_Genetics": "_",
+        "Prior_Therapy_Requirements": "prior neoadjuvant chemoradiotherapy",
+        "Required_Concurrent_Therapies": "_"
     },
     {
         "Primary Disease_category": "Gastric, gastro-oesophageal junction (GEJ) or oesophageal adenocarcinoma",
@@ -516,7 +733,11 @@ output json format:
         "Treatment line": "First line",
         "Treatment modality": "Combination",
         "Population": "Adult",
-        "Disease + sybtypes": "HER2-negative advanced or metastatic gastric, gastro-oesophageal junction or oesophageal adenocarcinoma"
+        "Disease + sybtypes": "HER2-negative advanced or metastatic gastric, gastro-oesophageal junction or oesophageal adenocarcinoma",
+         "Severity_or_Stage": "advanced or metastatic",
+        "Biomarkers_and_Genetics": "HER2-negative, PD-L1 CPS ≥ 5",
+        "Prior_Therapy_Requirements": "_",
+        "Required_Concurrent_Therapies": "fluoropyrimidine- and platinum-based combination chemotherapy"
     },
     {
         "Primary Disease_category": "Hepatocellular carcinoma (HCC)",
@@ -526,7 +747,11 @@ output json format:
         "Treatment line": "First line",
         "Treatment modality": "Combination",
         "Population": "Adult",
-        "Disease + sybtypes": "unresectable or advanced hepatocellular carcinoma"
+        "Disease + sybtypes": "unresectable or advanced hepatocellular carcinoma",
+        "Severity_or_Stage": "unresectable or advanced",
+        "Biomarkers_and_Genetics": "_",
+        "Prior_Therapy_Requirements": "_",
+        "Required_Concurrent_Therapies": "ipilimumab"
     },
     {
         "Primary Disease_category": "Neovascular (wet) age-related macular degeneration (AMD)",
@@ -536,11 +761,14 @@ output json format:
         "Treatment line": "_",
         "Treatment modality": "_",
         "Population": "Adult",
-        "Disease + sybtypes": "neovascular (wet) age-related macular degeneration (AMD)"
+        "Disease + sybtypes": "neovascular (wet) age-related macular degeneration (AMD)",
+        "Severity_or_Stage": "_",
+        "Biomarkers_and_Genetics": "_",
+        "Prior_Therapy_Requirements": "_",
+        "Required_Concurrent_Therapies": "_"
     }
 ]
-"""  # Replace with your actual prompt
-
+"""
 # Function to clean JSON response
 # Function to clean JSON response
 def clean_json_response(response_text):
@@ -572,7 +800,7 @@ def call_gemini_api(text_data, prompt):
     """
     Call the Gemini API with the provided text and prompt
     """
-    PROJECT_ID = "ybrant-gemini-vertexai"  # Replace with your project ID
+    PROJECT_ID = "cdp-dev-486704"  # Replace with your project ID
     LOCATION = os.environ.get("GOOGLE_CLOUD_REGION", "us-central1")
     
     client = genai.Client(

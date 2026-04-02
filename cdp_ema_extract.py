@@ -812,7 +812,7 @@ def call_gemini_api(text_data, prompt):
     contents = [text_data, prompt]
     
     generate_config = types.GenerateContentConfig(
-        temperature=0,
+        temperature=0.2,
         thinking_config=types.ThinkingConfig(
             thinking_budget=2500
         )
@@ -838,7 +838,7 @@ if st.button("🔍 Extract Info", type="primary", use_container_width=True):
         with st.spinner("🔄 Extracting information using Gemini AI..."):
             try:
                 # Call Gemini API
-                raw_response = call_gemini_api(data_input, cdp_ema_prompt)
+                raw_response = call_gemini_api(data_input, ema_prompt)
                 
                 # Clean the response (remove ```
                 cleaned_response = clean_json_response(raw_response)
